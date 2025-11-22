@@ -21,8 +21,12 @@ class TSPDataset(Dataset):
         }
 
 if __name__ == "__main__":
-    dataset = TSPDataset(num_samples=5, num_nodes=20)
-    sample = dataset[0]
-    print("座標の形:", sample['points'].shape)
-    print("距離行列の形:", sample['distance'].shape)
-    print("データ生成成功！")
+    dataset = TSPDataset(num_samples=2, num_nodes=4, seed=42)
+
+    print("--- 都市の座標 ---")
+    print(dataset.points[0])
+    print(dataset.points[1])
+    
+    print("\n--- 距離行列 ---")
+    print(dataset.distances[0])
+    print(dataset.distances[1])
