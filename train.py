@@ -9,10 +9,10 @@ from utils import get_cyclic_matrix, sample_gumbel, sinkhorn
 # --- 設定エリア ---
 NUM_NODES = 20        # 都市の数
 NUM_SAMPLES = 1000    # データ数
-BATCH_SIZE = 32       # 一度に計算する数
+BATCH_SIZE = 32       # 一度に計算する数 (不明)
 EPOCHS = 100          # 学習回数
 LR = 1e-3             # 学習率
-TAU = 2.0            # 温度パラメータ (tau)
+TAU = 2.0             # 温度パラメータ (tau) 
 GAMMA = 0.1           # ノイズの大きさ (gamma)
 SINKHORN_ITERS = 60   # Sinkhornの繰り返し回数
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -32,13 +32,11 @@ for epoch in range(EPOCHS):
     total_loss = 0
     
     for batch in dataloader:
-        # データをGPUへ
-        points = batch['points'].to(DEVICE)     # 座標
-        distances = batch['distance'].to(DEVICE)# 距離行列 D
+        points = batch['points'].to(DEVICE)
+        distances = batch['distance'].to(DEVICE)
         
         optimizer.zero_grad()
         
-        # (1) モデルでスコア(logits)を出す
         logits = model(points)
         
         # (2) ガンベルノイズを加えて Sinkhorn で確率行列 T にする
