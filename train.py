@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from data import TSPDataset
-from model import SimpleTSPModel
+from model import TSPModel
 
 def train():
     # --- 1. 設定 (Hyperparameters) ---
@@ -23,7 +23,7 @@ def train():
     # DataLoader: データをバッチサイズごとにまとめて運んでくれる運び屋
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
-    model = SimpleTSPModel(num_nodes=num_nodes).to(device)
+    model = TSPModel(num_nodes=num_nodes).to(device)
     
     # Optimizer: モデルのパラメータを更新する指導教官 (Adamを使用)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -35,39 +35,30 @@ def train():
     for epoch in range(epochs):
         total_loss = 0
         
+        # train.py の学習ループ内
+
         for batch in dataloader:
             # データをデバイスへ移動
-            distances = batch['distance'].to(device) # Shape: (Batch, N, N)
+            distances = batch['distance'].to(device)
             
-            # --- Forward (順伝播) ---
-            # 1. モデルに距離行列を入れて、ソフト置換行列 T を得る
-            soft_perm = model(distances) # (Batch, N, N)
+            # ★追加: 座標データも取り出す！
+            points = batch['points'].to(device) 
             
-            # --- Loss Calculation (損失計算) ---
-            # 式: Loss = <D, T V T^T> (距離行列 D と、生成されたルート行列の内積)
+            # --- Forward ---
+            # ★修正: points と distances の両方を渡す
+            soft_perm = model(points, distances) 
             
-            # 正準サイクル行列 V を取り出し、バッチサイズ分に増やす
+            # (以下の Loss計算などはそのままでOK)
             V = model.matrix_V
-            V_batch = V.unsqueeze(0).expand(distances.size(0), -1, -1) # (Batch, N, N)
+            V_batch = V.unsqueeze(0).expand(distances.size(0), -1, -1)
             
-            # 行列演算: T @ V @ T^T を計算
-            # bmm (Batch Matrix Multiplication) は「バッチごとの行列積」です
-            
-            # Step 1: T @ V
             TV = torch.bmm(soft_perm, V_batch)
-            
-            # Step 2: (T @ V) @ T_transpose
-            # これで「ソフト隣接行列（どの都市からどの都市へ行くか）」ができます
             soft_adjacency = torch.bmm(TV, soft_perm.transpose(1, 2))
+            loss = torch.sum(distances * soft_adjacency) / distances.size(0)
             
-            # Step 3: 距離行列 D とかけ算して合計する
-            # これが「期待される移動距離」になります
-            loss = torch.sum(distances * soft_adjacency) / distances.size(0) # バッチ平均をとる
-            
-            # --- Backward (逆伝播) ---
-            optimizer.zero_grad() # 前回の勾配をリセット
-            loss.backward()       # 勾配を計算
-            optimizer.step()      # パラメータを更新
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
             
             total_loss += loss.item()
             
