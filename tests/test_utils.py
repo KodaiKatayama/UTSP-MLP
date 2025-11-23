@@ -15,8 +15,7 @@ def test_pipeline_generation_to_adjacency():
     scale_s = 1.0    # 論文のパラメータ s
     
     # --- 2. データ生成 (data.py) ---
-    # seed=42で固定して、毎回同じ結果が出るようにする
-    dataset = TSPDataset(num_samples=1, num_nodes=n_nodes, seed=42)
+    dataset = TSPDataset(num_samples=1, num_nodes=n_nodes)
     sample = dataset[0]
     
     points = sample['points']    # 座標 x
@@ -41,3 +40,6 @@ def test_pipeline_generation_to_adjacency():
     print("\n[Step 3] 隣接行列 A (対角成分は1, 遠いほど0):")
     for row in adj_A:
         print("  " + "  ".join(f"{val:6.4f}" for val in row))
+
+if __name__ == "__main__":
+    test_pipeline_generation_to_adjacency()
