@@ -1,7 +1,6 @@
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import numpy as np # 新規: 平均値を計算するため
 
 from data import TSPDataset
 from model import TSPModel
@@ -9,22 +8,15 @@ from utils import get_cyclic_matrix, sample_gumbel, sinkhorn, Hungarian
 
 # --- 設定エリア ---
 NUM_NODES = 20        # 都市の数
-NUM_SAMPLES = 1000    
-BATCH_SIZE = 32       
-EPOCHS = 100          
-LR = 1e-3             
-ALPHA = 10.0          
-TAU = 2.0             
-GAMMA = 0.1           
-SINKHORN_ITERS = 60
+NUM_SAMPLES = 1000    # データ数
+BATCH_SIZE = 32       # 一度に計算する数 (不明)
+EPOCHS = 100          # 学習回数
+LR = 1e-3             # 学習率
+ALPHA = 10.0          # スケーリング定数 (α)
+TAU = 2.0             # 温度パラメータ (tau) 
+GAMMA = 0.1           # ノイズの大きさ (gamma)
+SINKHORN_ITERS = 60   # Sinkhornの繰り返し回数
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-# --- ロギングと保存設定 ---
-BEST_DIST = float('inf') # 最小距離の初期値
-SAVE_PATH = 'best_model.pth' # 保存ファイル名
-# 学習履歴を記録するリスト
-history = {'loss': [], 'dist': []} 
-# -------------------------
 
 dataset = TSPDataset(NUM_SAMPLES, NUM_NODES)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -36,7 +28,7 @@ V = get_cyclic_matrix(NUM_NODES).to(DEVICE)
 model.train()
 for epoch in range(EPOCHS):
     total_loss = 0
-    total_distance = 0
+    total_real = 0
     
     for batch in dataloader:
         points = batch['points'].to(DEVICE)
@@ -44,8 +36,8 @@ for epoch in range(EPOCHS):
         
         optimizer.zero_grad()
 
-        # --- 順伝播とLoss計算 (変更なし) ---
         logits = model(points)
+        
         noise = sample_gumbel(logits.shape).to(DEVICE)
         noisy_logits = (logits + GAMMA * noise) / TAU
         T = sinkhorn(noisy_logits, n_iters=SINKHORN_ITERS)
@@ -56,32 +48,18 @@ for epoch in range(EPOCHS):
         
         loss.backward()
         optimizer.step()
+        
         total_loss += loss.item()
 
-        # --- 評価 (実際の距離計算) ---
+        # --- ハード割当をバッチ単位で評価して累積 ---
         with torch.no_grad():
-            # 決定論的なデコード (ノイズなし)
-            deterministic_logits = logits / TAU
-            P = Hungarian(-deterministic_logits) 
-            
+            P = Hungarian(-noisy_logits)
+            V_batch = V.unsqueeze(0)
             hard_adj = torch.matmul(torch.matmul(P, V_batch), P.transpose(1, 2))
             current_dist_batch = torch.sum(distances * hard_adj, dim=(1, 2))
-            total_distance += current_dist_batch.mean().item()
-        
-    avg_loss = total_loss / len(dataloader)
-    avg_dist = total_distance / len(dataloader) # 各エポックの平均距離
+            total_real += current_dist_batch.sum().item()
+    # エポック中に累積したハード距離の平均（サンプルあたり）
+    dataset_size = len(dataset)
+    mean_real_dist = total_real / dataset_size
 
-    # 1. 履歴を記録
-    history['loss'].append(avg_loss)
-    history['dist'].append(avg_dist)
-
-    # 2. ベストモデルを保存 (最低の検証距離を達成したモデルを保存)
-    if avg_dist < BEST_DIST:
-        print(f"    *New Best Found! Saving model to {SAVE_PATH} (Dist: {BEST_DIST:.4f} -> {avg_dist:.4f})")
-        BEST_DIST = avg_dist
-        torch.save(model.state_dict(), SAVE_PATH) # パラメータを保存
-
-    print(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Real Dist = {avg_dist:.4f} (Best: {BEST_DIST:.4f})")
-
-# 最終結果の保存 (図の生成に利用)
-np.savez('training_history.npz', loss=history['loss'], dist=history['dist'])
+    print(f"Epoch {epoch+1}: Loss = {total_loss / len(dataloader):.4f}, Real Distance = {mean_real_dist:.4f}")
