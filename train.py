@@ -3,10 +3,11 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from data import TSPDataset
-from model import TSPModel
+from model import get_model
 from utils import get_cyclic_matrix, sample_gumbel, sinkhorn, Hungarian
 
 # --- 設定エリア ---
+MODEL_TYPE = 'mlp'
 NUM_NODES = 20        # 都市の数
 NUM_SAMPLES = 1000    # データ数
 BATCH_SIZE = 32       # 一度に計算する数 (不明)
@@ -21,7 +22,13 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 dataset = TSPDataset(NUM_SAMPLES, NUM_NODES)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-model = TSPModel(input_dim=2, hidden_dim=128, num_nodes=NUM_NODES, alpha=ALPHA).to(DEVICE)
+model = get_model(
+    model_name=MODEL_TYPE,
+    input_dim=2,
+    hidden_dim=128,
+    num_nodes=NUM_NODES,
+    alpha=ALPHA
+).to(DEVICE)
 optimizer = optim.Adam(model.parameters(), lr=LR)
 V = get_cyclic_matrix(NUM_NODES).to(DEVICE)
 
